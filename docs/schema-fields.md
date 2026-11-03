@@ -155,12 +155,18 @@
 | `misc_rate` | decimal(6,4) | 其他杂费占比 % |
 | `volume_divisor` | int unsigned | **材积比**（抛货），默认由 `first_leg_method_code` 带出，允许覆盖 |
 | `logistics_provider` | varchar(64) | 物流商 |
-| `first_leg_price` | decimal(10,2) | 头程运费单价 ￥/kg |
+| `first_leg_price` | decimal(10,2) | 头程运费单价 ￥/kg（仅 SELF_CARRIER 参与计算） |
+| `shipping_method` | varchar(16) | **配送方式**：AMAZON_SEND 亚马逊SEND / SELF_CARRIER 自选承运人；NULL 视为 SELF_CARRIER。决定头程算法 |
+| `first_leg_method_code` | varchar(32) | 头程方式 → `dict_first_leg_method`（记录用） |
+| `shipping_total_fee_usd` | decimal(12,2) | 配送总费用 $（整票货件，仅 AMAZON_SEND 参与计算） |
+| `total_units` | int unsigned | 商品总数（件，仅 AMAZON_SEND 参与单件头程计算） |
 | `commission_category` | varchar(64) | 佣金类目编码 → `dict_category_commission` |
 | `return_category` | varchar(64) | **退货阈值类目** → `dict_category_return_threshold`。**不联动，每轮手选**（两套字典命名不一致） |
 | `return_rate` | decimal(6,4) | 退货率 % |
 | `return_fee_usd` | decimal(10,2) | 尾程退货费 $/件 |
 | `storage_fee_usd` | decimal(10,2) | **合仓费** $/件（页面标签写"合仓费"，字段名是 storage） |
+| `inbound_config_fee_usd` | decimal(12,6) | **入库配置费** $/件，计算器「FBA费用计算」卡片手填；参与利润计算，空按 0 处理 |
+| `monthly_storage_usd` | decimal(12,6) | **月度仓储费** $/件，计算器「FBA费用计算」卡片手填；参与利润计算，空按 0 处理 |
 | `sale_price_usd` | decimal(10,2) | 售价 $ |
 | `exchange_rate` | decimal(12,6) | **汇率快照**（本方案采用的汇率，不随实时汇率变动） |
 | `target_margin` | decimal(6,4) | 目标利润率 % |
@@ -203,6 +209,8 @@
 | `return_cost_cny` | decimal(12,4) | 平均退货费用 ￥ |
 | `purchase_cost` | decimal(12,4) | 采购成本 ￥（输入冗余） |
 | `storage_fee_usd` | decimal(10,2) | 合仓费 $（输入冗余） |
+| `inbound_config_fee_usd` | decimal(12,6) | 入库配置费 $/件（输入冗余），空按 0 处理 |
+| `monthly_storage_usd` | decimal(12,6) | 月度仓储费 $/件（输入冗余），空按 0 处理 |
 | `return_fee_usd` | decimal(10,2) | 尾程退货费 $（输入冗余） |
 | `ad_rate` / `vat_rate` / `misc_rate` | decimal(6,4) | 各项占比（输入冗余） |
 | `exchange_rate` | decimal(12,6) | 本次计算所用汇率，**必须固化** |

@@ -90,6 +90,19 @@ public class SizeTierService {
         cache = null;
     }
 
+    /** 按 tier_code 取字典行（走缓存），供利润计算器取中文名与 weight_basis */
+    public DictFbaSizeTier tierOf(String tierCode) {
+        if (tierCode == null) {
+            return null;
+        }
+        for (DictFbaSizeTier t : tiers()) {
+            if (tierCode.equals(t.getTierCode())) {
+                return t;
+            }
+        }
+        return null;
+    }
+
     /** 字典全量载入内存（项目约定：字典不加 JOIN，应用层缓存） */
     private List<DictFbaSizeTier> tiers() {
         List<DictFbaSizeTier> snapshot = cache;

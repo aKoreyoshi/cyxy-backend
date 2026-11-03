@@ -67,6 +67,21 @@ public class ProfitPlan extends BaseEntity {
     /** 头程运费单价 ￥/kg */
     private BigDecimal firstLegPrice;
 
+    /**
+     * 配送方式：AMAZON_SEND 亚马逊SEND（整票核算）/ SELF_CARRIER 自选承运人。
+     * 决定头程运费算法；NULL 视为 SELF_CARRIER（历史方案兼容）
+     */
+    private String shippingMethod;
+
+    /** 头程方式 → dict_first_leg_method.method_code（记录用） */
+    private String firstLegMethodCode;
+
+    /** 配送总费用 $（整票货件），仅 AMAZON_SEND 参与计算 */
+    private BigDecimal shippingTotalFeeUsd;
+
+    /** 商品总数（件，本票货件），仅 AMAZON_SEND 参与计算 */
+    private Integer totalUnits;
+
     /** 佣金类目，指向 dict_category_commission.category_code */
     private String commissionCategory;
 
@@ -81,6 +96,12 @@ public class ProfitPlan extends BaseEntity {
 
     /** 合仓费 $/件，页面标签写「合仓费」，字段名沿用 storage */
     private BigDecimal storageFeeUsd;
+
+    /** 入库配置费 $/件，计算器「FBA费用计算」卡片手填；参与利润计算，空按 0 处理 */
+    private BigDecimal inboundConfigFeeUsd;
+
+    /** 月度仓储费 $/件，计算器「FBA费用计算」卡片手填；参与利润计算，空按 0 处理 */
+    private BigDecimal monthlyStorageUsd;
 
     /** 售价 $ */
     private BigDecimal salePriceUsd;

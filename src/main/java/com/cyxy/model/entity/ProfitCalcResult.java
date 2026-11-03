@@ -116,6 +116,12 @@ public class ProfitCalcResult extends BaseEntity {
     /** 合仓费 $（输入冗余） */
     private BigDecimal storageFeeUsd;
 
+    /** 入库配置费 $/件（输入冗余），空按 0 处理 */
+    private BigDecimal inboundConfigFeeUsd;
+
+    /** 月度仓储费 $/件（输入冗余），空按 0 处理 */
+    private BigDecimal monthlyStorageUsd;
+
     /** 尾程退货费 $（输入冗余） */
     private BigDecimal returnFeeUsd;
 
