@@ -4,3 +4,56 @@ server:
 spring:
   application:
     name: Project-cyxy
+
+  # 默认激活 local profile，数据库口令放在 application-local.yml（不入 git）。
+  # 部署/CI 可传 SPRING_PROFILES_ACTIVE=prod 或直接给 DB_PASSWORD 环境变量覆盖。
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  # Excel 批量导入：Spring 默认单文件只有 1MB，批量导入必须放开。
+  # 10MB 对 xlsx 足够（大约几万行），再大就应该拆文件了
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  # 数据源：连本地 MySQL 8.0.17 的 cyxy 库
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # serverTimezone 必须显式给，否则 MySQL 8.0 会按系统时区解释 datetime(3)
+    # allowPublicKeyRetrieval 兼容 root 的 caching_sha2_password 认证
+    # characterEncoding 要写 UTF-8（Java 的字符集名），写 utf8mb4 会报 Unsupported character encoding
+    url: "jdbc:mysql://localhost:3306/cyxy?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true"
+    # 口令不写死：优先读 DB_PASSWORD 环境变量，本地开发由 application-local.yml 提供
+    # （该文件在 .gitignore 里，仓库中只有 application-local.yml.example 模板）
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
+      connection-timeout: 30000
+      # MySQL 8 建议用 JDBC4 的 isValid 校验，比 SELECT 1 快
+      connection-test-query: SELECT 1
+
+  # application.yml，spring: 下面
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
+mybatis-plus:
+  configuration:
+    # 数据库下划线 <-> Java 驼峰，必须开（如 bill_weight_lb -> billWeightLb）
+    map-underscore-to-camel-case: true
+    # 开发期打印 SQL，上线前把这行删掉
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      # 7 张自增主键表走 AUTO；5 张业务编码主键的字典表在 Entity 上用 @TableId(type = IdType.INPUT) 覆盖
+      id-type: AUTO
+      # 软删字段：实际列名 is_deleted
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    com.cyxy: debug

@@ -17,7 +17,7 @@ import java.util.Map;
 public class TestController {
     @GetMapping("/api/user")
     public Result<String> user(){
-        System.out.println("-----前端发送请求。");
+//        System.out.println("-----前端发送请求。");
         return Result.ok( "请求成功。");
     }
 }

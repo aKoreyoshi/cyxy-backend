@@ -36,3 +36,5 @@ build/
 
 ### WorkBuddy ###
 .workbuddy/
+### 本地配置：含数据库口令，禁止入库 ###
+src/main/resources/application-local.yml
