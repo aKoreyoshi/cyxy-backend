@@ -57,3 +57,11 @@ mybatis-plus:
 logging:
   level:
     com.cyxy: debug
+
+# 登录令牌有效时长（小时）。令牌过期后拦截器直接返回 401，前端会自动跳登录页。
+# ⚠️ 必须用 kebab-case（token-hours）：LoginService 里是
+#    @Value("${cyxy.auth.token-hours:8}")，@Value 是精确匹配、不做 Spring 的松散绑定，
+#    写成 token_hours 会读不到，改这里的数字也永远不生效（只会走默认 8）。
+cyxy:
+  auth:
+    token-hours: 8

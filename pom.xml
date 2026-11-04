@@ -79,6 +79,14 @@
             <version>${poi.version}</version>
         </dependency>
 
+        <!-- pom.xml：只要 BCrypt 这个工具类。
+        千万别引 spring-boot-starter-security —— 它会自动配置并把所有接口锁上，
+        跟我们自己写的拦截器打架，到时候连 /api/login 都进不去。 -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
         <!-- 单测：回归比对 calc.js 的 ￥31.72 / 25.0071% -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
