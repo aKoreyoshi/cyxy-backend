@@ -15,7 +15,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 10MB
-      max-request-size: 10MB
+      max-request-size: 12MB  # 整个请求体，留出 multipart 开销（给 Excel 导入也无妨）
 
   # 数据源：连本地 MySQL 8.0.17 的 cyxy 库
   datasource:
@@ -65,3 +65,10 @@ logging:
 cyxy:
   auth:
     token-hours: 8
+
+  # COS 非机密项给默认值：服务器上若忘了放 application-local.yml 也能正常启动。
+  # 两个密钥只在 application-local.yml（已 gitignore），profile 专属配置优先级更高，
+  # 同名键会覆盖这里、不同名键会合并 —— 所以用户已填好的那份不用动。
+  cos:
+    region: ap-shanghai
+    bucket-name: cyxy-product-1317558205

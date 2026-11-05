@@ -38,15 +38,10 @@ public class ProductService {
      */
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
-    /** 排序白名单：前端 sortField → 数据库列名，防 SQL 注入。按列表页实际 prop 补齐 */
-    private static final Map<String, String> SORT_COLUMNS = Map.of(
-            "product_no", "product_no",
-            "name_cn", "name_cn",
-            "purchase_price", "purchase_price",
-            "list_price_usd", "list_price_usd",
-            "created_time", "created_time",
-            "updated_time", "updated_time"
-    );
+    /**
+     * 排序白名单：前端 sortField → 数据库列名，防 SQL 注入。按列表页实际 prop 补齐
+     */
+    private static final Map<String, String> SORT_COLUMNS = Map.of("product_no", "product_no", "name_cn", "name_cn", "purchase_price", "purchase_price", "list_price_usd", "list_price_usd", "created_time", "created_time", "updated_time", "updated_time");
 
     // 创建新商品
     public Product createProduct(Product product) {
@@ -69,10 +64,7 @@ public class ProductService {
         // ⚠️ 必须走 selectOne(wrapper) 而不是 selectById：MyBatis 一级缓存会在同一个
         // SqlSession 里把上一次 selectById 的**对象实例**直接返回，那样 exists 与传入的
         // product 是同一个引用，「用库值覆盖」就变成了自己给自己赋值，锁定会静默失效
-        Product exists = productMapper.selectOne(new LambdaQueryWrapper<Product>()
-                .eq(Product::getId, product.getId())
-                .select(Product::getActualDeliveryTime, Product::getExpectedDeliveryDate,
-                        Product::getDeliveryStatus, Product::getDelayDays));
+        Product exists = productMapper.selectOne(new LambdaQueryWrapper<Product>().eq(Product::getId, product.getId()).select(Product::getActualDeliveryTime, Product::getExpectedDeliveryDate, Product::getDeliveryStatus, Product::getDelayDays));
         checkProductNo(product.getProductNo(), product.getId());
 
         // 已确认送达 → 配送相关字段锁定。
@@ -95,14 +87,8 @@ public class ProductService {
         // 还没确认送达时，「清空预计送达时间」要能真正清掉：
         // updateById 是 NOT_NULL 策略，传 null 的字段会被跳过，所以这里用 wrapper 显式同步一次
         if (product.getActualDeliveryTime() == null) {
-            String status = product.getExpectedDeliveryDate() == null
-                    ? DeliveryStatus.NOT_SET.getCode()
-                    : DeliveryStatus.IN_TRANSIT.getCode();
-            productMapper.update(null, new LambdaUpdateWrapper<Product>()
-                    .eq(Product::getId, product.getId())
-                    .set(Product::getExpectedDeliveryDate, product.getExpectedDeliveryDate())
-                    .set(Product::getDeliveryStatus, status)
-                    .set(Product::getDelayDays, null));
+            String status = product.getExpectedDeliveryDate() == null ? DeliveryStatus.NOT_SET.getCode() : DeliveryStatus.IN_TRANSIT.getCode();
+            productMapper.update(null, new LambdaUpdateWrapper<Product>().eq(Product::getId, product.getId()).set(Product::getExpectedDeliveryDate, product.getExpectedDeliveryDate()).set(Product::getDeliveryStatus, status).set(Product::getDelayDays, null));
         }
 
         return productMapper.selectById(product.getId());
@@ -115,7 +101,7 @@ public class ProductService {
 
     /**
      * 确认送达。
-     *
+     * <p>
      * 时间由服务端按北京时间生成，不接收前端传值（防篡改、也避免客户端时区不准）；
      * 判定按自然日：实际送达日期 − 预计送达日期，负数提前 / 0 准时 / 正数晚送达。
      * 确认后 expected_delivery_date 锁定，如需修改走 cancelDelivery。
@@ -136,11 +122,7 @@ public class ProductService {
         DeliveryStatus status = DeliveryStatus.judge(days);
 
         // 只更这 3 个字段：走 wrapper 显式 set，避免把整个实体回写（main_image 等长字段）
-        productMapper.update(null, new LambdaUpdateWrapper<Product>()
-                .eq(Product::getId, id)
-                .set(Product::getActualDeliveryTime, now)
-                .set(Product::getDelayDays, days)
-                .set(Product::getDeliveryStatus, status.getCode()));
+        productMapper.update(null, new LambdaUpdateWrapper<Product>().eq(Product::getId, id).set(Product::getActualDeliveryTime, now).set(Product::getDelayDays, days).set(Product::getDeliveryStatus, status.getCode()));
 
         return productMapper.selectById(id);
     }
@@ -157,20 +139,16 @@ public class ProductService {
             throw new CYXYException("尚未确认送达，无需撤销");
         }
 
-        String backTo = product.getExpectedDeliveryDate() == null
-                ? DeliveryStatus.NOT_SET.getCode()
-                : DeliveryStatus.IN_TRANSIT.getCode();
+        String backTo = product.getExpectedDeliveryDate() == null ? DeliveryStatus.NOT_SET.getCode() : DeliveryStatus.IN_TRANSIT.getCode();
 
-        productMapper.update(null, new LambdaUpdateWrapper<Product>()
-                .eq(Product::getId, id)
-                .set(Product::getActualDeliveryTime, null)
-                .set(Product::getDelayDays, null)
-                .set(Product::getDeliveryStatus, backTo));
+        productMapper.update(null, new LambdaUpdateWrapper<Product>().eq(Product::getId, id).set(Product::getActualDeliveryTime, null).set(Product::getDelayDays, null).set(Product::getDeliveryStatus, backTo));
 
         return productMapper.selectById(id);
     }
 
-    /** 按 id 取产品，不存在直接抛异常 */
+    /**
+     * 按 id 取产品，不存在直接抛异常
+     */
     private Product requireProduct(Long id) {
         if (id == null) throw new CYXYException("缺少产品 ID");
         Product product = productMapper.selectById(id);
@@ -186,22 +164,14 @@ public class ProductService {
     }
 
     public Map<String, Object> productList(ProductQueryDTO queryParam) {
-        int pageNumber = queryParam.getPageNumber() == null ||
-                queryParam.getPageNumber() < 1 ? 1 : queryParam.getPageNumber();
-        int pageSize = queryParam.getPageSize() == null ||
-                queryParam.getPageSize() < 1 ? 10 : queryParam.getPageSize();
+        int pageNumber = queryParam.getPageNumber() == null || queryParam.getPageNumber() < 1 ? 1 : queryParam.getPageNumber();
+        int pageSize = queryParam.getPageSize() == null || queryParam.getPageSize() < 1 ? 10 : queryParam.getPageSize();
 
-        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
-                .like(StringUtils.hasText(queryParam.getNameCn()), Product::getNameCn, queryParam.getNameCn())
-                .like(StringUtils.hasText(queryParam.getProductNo()), Product::getProductNo, queryParam.getProductNo())
-                .eq(StringUtils.hasText(queryParam.getCategoryCode()), Product::getCategoryCode, queryParam.getCategoryCode())
-                .eq(StringUtils.hasText(queryParam.getStatus()), Product::getStatus, queryParam.getStatus());
+        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>().like(StringUtils.hasText(queryParam.getNameCn()), Product::getNameCn, queryParam.getNameCn()).like(StringUtils.hasText(queryParam.getProductNo()), Product::getProductNo, queryParam.getProductNo()).eq(StringUtils.hasText(queryParam.getCategoryCode()), Product::getCategoryCode, queryParam.getCategoryCode()).eq(StringUtils.hasText(queryParam.getStatus()), Product::getStatus, queryParam.getStatus());
 
         // ⚠️ SORT_COLUMNS 是 Map.of(...)，它的 get(null) 会直接抛 NPE（不是返回 null），
         // 而「不排序」是列表页的默认情况，所以这里必须先挡一道
-        String column = queryParam.getSortField() == null
-                ? null
-                : SORT_COLUMNS.get(queryParam.getSortField());
+        String column = queryParam.getSortField() == null ? null : SORT_COLUMNS.get(queryParam.getSortField());
         if (column != null) {
             boolean asc = !"descending".equals(queryParam.getSortOrder());
             wrapper.last("ORDER BY " + column + (asc ? " ASC" : " DESC"));
@@ -223,24 +193,23 @@ public class ProductService {
     // 判断产品是否存在(根据产品编号)
     private void checkProductNo(String no, Long excludeId) {
         if (!StringUtils.hasText(no)) throw new CYXYException("产品编号不能为空");
-        Long count = productMapper.selectCount(new LambdaQueryWrapper<Product>()
-                .eq(Product::getProductNo, no)
-                .ne(excludeId != null, Product::getId, excludeId));
+        Long count = productMapper.selectCount(new LambdaQueryWrapper<Product>().eq(Product::getProductNo, no).ne(excludeId != null, Product::getId, excludeId));
         if (count != null && count > 0) throw new CYXYException("产品编号已存在：" + no);
     }
 
-    /** 落库前兜底：尺寸分段重算 + 两个 NOT NULL 字段的临时处理 */
+    /**
+     * 落库前兜底：尺寸分段重算 + 两个 NOT NULL 字段的临时处理
+     */
     private void normalize(Product product) {
-        String tier = sizeTierService.resolve(
-                product.getLengthCm(), product.getWidthCm(),
-                product.getHeightCm(), product.getPackagedWeightG());
+        String tier = sizeTierService.resolve(product.getLengthCm(), product.getWidthCm(), product.getHeightCm(), product.getPackagedWeightG());
         if (tier != null) product.setSizeTierCode(tier);   // 不信前端传的，防篡改/漏传
 
         // list_price_usd 库里 NOT NULL 且无默认值，但前端没列必填 → 补 0
         if (product.getListPriceUsd() == null) product.setListPriceUsd(BigDecimal.ZERO);
 
-        // 过渡：上传控件目前产出 dataURL，varchar(512) 存不下，先存空串。
-        // TODO 接对象存储后改成「上传拿 URL 再回填」，这段删掉。
+        // main_image 现在存的是 COS 短 URL（约 120 字符），这段兜底正常不会触发。
+        // 保留是为了兼容库里可能残留的历史 dataURL 脏数据：删掉的话，编辑保存时
+        // varchar(512) 会被超长字符串撑爆，整条 SQL 报错，连其它字段也存不进去
         if (product.getMainImage() != null && product.getMainImage().length() > 512) {
             product.setMainImage("");
         }
@@ -248,9 +217,7 @@ public class ProductService {
         // 配送状态：只要还没确认送达，就跟随「有没有填预计送达时间」自动维护。
         // 已确认的终态由 confirmDelivery 写入，这里不碰
         if (product.getActualDeliveryTime() == null) {
-            product.setDeliveryStatus(product.getExpectedDeliveryDate() == null
-                    ? DeliveryStatus.NOT_SET.getCode()
-                    : DeliveryStatus.IN_TRANSIT.getCode());
+            product.setDeliveryStatus(product.getExpectedDeliveryDate() == null ? DeliveryStatus.NOT_SET.getCode() : DeliveryStatus.IN_TRANSIT.getCode());
         }
     }
 

@@ -30,6 +30,7 @@
              没用 EasyExcel：它在 Spring Boot 4 下容易与 POI 版本打架，
              而模板里的下拉校验本来就是 POI 原生能力 -->
         <poi.version>5.3.0</poi.version>
+        <cos.version>5.6.269</cos.version>
     </properties>
 
     <dependencies>
@@ -85,6 +86,16 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
+        <!-- dependencies 里加：腾讯云 COS Java SDK，后端中转上传用。
+     版本 Spring Boot BOM 管不到，必须显式写。落地时跑一次 mvn dependency:tree：
+     它会传递 jackson-databind / slf4j / httpclient4，Boot 的 dependencyManagement
+     会锁定前两者版本，一般无冲突；有冲突再针对性 exclusion，别一上来全排掉。 -->
+        <dependency>
+            <groupId>com.qcloud</groupId>
+            <artifactId>cos_api</artifactId>
+            <version>${cos.version}</version>
         </dependency>
 
         <!-- 单测：回归比对 calc.js 的 ￥31.72 / 25.0071% -->
