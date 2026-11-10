@@ -7,7 +7,9 @@ import com.cyxy.model.dto.ProfitCalcFormDTO;
 import com.cyxy.model.entity.Product;
 import com.cyxy.model.entity.ProfitCalcResult;
 import com.cyxy.model.vo.DictOptionVO;
+import com.cyxy.model.vo.ReturnFeeLookupVO;
 import com.cyxy.service.ProfitCalcService;
+import com.cyxy.service.ProfitDictLoader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -39,6 +42,7 @@ public class ProfitController {
     private static final long OPTION_LIMIT = 20;
 
     private final ProfitCalcService profitCalcService;
+    private final ProfitDictLoader profitDictLoader;
     private final ProductMapper productMapper;
 
     /** 试算：只算不存 */
@@ -75,5 +79,23 @@ public class ProfitController {
     @GetMapping("/product-prefill")
     public Result<ProfitCalcFormDTO> prefill(@RequestParam Long productId) {
         return Result.ok(profitCalcService.prefill(productId));
+    }
+
+    /**
+     * 尾程退货费自动带出：只按「实际计费重」查 dict_return_processing_fee。
+     *
+     * <p>只读不落库，前端拿到 fee_usd 后填进那个<b>仍可编辑</b>的输入框；
+     * 手改后的值照常随 calc / save 提交，后端不会用查表值覆盖用户的选择。</p>
+     *
+     * <p>用户口径是「只根据实际的计费重取费用」：计费重由前端 calc.js 算出
+     * （实重与体积重取大），是唯一必需入参。tierCode 只是<b>可选</b>的收窄条件，
+     * 用计算器本来就算出的尺寸分段把两套标准尺寸档位分开，不要求用户额外填；
+     * 不传时后端全表纯按计费重匹配。</p>
+     */
+    @GetMapping("/return-fee")
+    public Result<ReturnFeeLookupVO> returnFee(
+            @RequestParam(required = false) String tierCode,
+            @RequestParam(required = false) BigDecimal billWeightLb) {
+        return Result.ok(profitDictLoader.lookupReturnFee(tierCode, billWeightLb));
     }
 }

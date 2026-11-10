@@ -9,7 +9,7 @@ SET NAMES utf8mb4;
 INSERT INTO sys_config
     (config_key, config_value, value_type, config_name, remark)
 VALUES
-    ('DEFAULT_EXCHANGE_RATE', '6.68', 'NUMBER', '默认汇率', 'USD/CNY；前端 dict.js 默认值，实际以汇率表/接口为准'),
+    ('DEFAULT_EXCHANGE_RATE', '6.68', 'NUMBER', '最新汇率', 'USD/CNY 当前生效汇率；业务读取的唯一入口。由汇率同步任务在写入 dict_exchange_rate 最新一天记录时同步更新，历史变化只留在时序表里'),
     ('FUEL_SURCHARGE_RATE', '0.035', 'NUMBER', '燃油与物流附加费率', '占配送费；2026-04-17 起美国站加收 3.5%'),
     ('DIM_DIVISOR_INCH', '139', 'NUMBER', '体积重除数', '立方英寸/磅；亚马逊美国站标准件'),
     ('OZ_PER_LB', '16', 'NUMBER', '磅转盎司', '数学常数，放此处便于统一配置'),

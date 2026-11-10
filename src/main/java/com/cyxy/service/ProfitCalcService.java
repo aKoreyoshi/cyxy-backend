@@ -112,7 +112,8 @@ public class ProfitCalcService {
         double weightLb = weightKg * KG_TO_LB;
 
         /* 3. 头程运费：按配送方式分叉（与 product 表口径一致）
-           AMAZON_SEND：亚马逊整票核算，单件 = 配送总费用($) × 汇率 ÷ 商品总数；件数缺失按 0 处理
+           AMAZON_SEND：单件 = 当前产品配送总费用($) × 汇率 ÷ 当前产品件数；件数缺失按 0 处理。
+           费用与件数都从「整票」改成「当前产品」，分子分母同步缩小，所以公式本身不用改
            SELF_CARRIER（含空值，历史口径）：MAX(实重, 抛重) × 单价 */
         boolean amazonSend = "AMAZON_SEND".equalsIgnoreCase(f.getShippingMethod());
         double firstLeg;
@@ -274,7 +275,7 @@ public class ProfitCalcService {
         // 配送方式：决定头程算法；历史空值归一成 SELF_CARRIER，前端下拉能直接回显
         f.setShippingMethod(p.getShippingMethod() == null ? "SELF_CARRIER" : p.getShippingMethod());
         f.setFirstLegMethodCode(p.getFirstLegMethodCode());
-        // SEND 三件套：整票配送费 $ + 总件数，页面只读展示并参与单件头程计算
+        // SEND 费用两项：当前产品的配送费 $ + 当前产品的件数，页面只读展示并参与单件头程计算
         f.setShippingTotalFeeUsd(p.getShippingTotalFeeUsd());
         f.setTotalUnits(p.getTotalUnits());
 

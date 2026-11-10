@@ -31,10 +31,10 @@ public class ProfitCalcFormDTO {
     /** 头程方式 → dict_first_leg_method，仅记录用，不直接参与计算 */
     private String firstLegMethodCode;
 
-    /** 配送总费用 $（整票货件），仅 AMAZON_SEND 参与计算 */
+    /** 配送总费用 $（当前产品，非整票货件），仅 AMAZON_SEND 参与计算；关联产品时由产品档案带入 */
     private BigDecimal shippingTotalFeeUsd;
 
-    /** 商品总数（件），仅 AMAZON_SEND 参与计算 */
+    /** 当前产品的件数（不记单票货件总数），仅 AMAZON_SEND 参与计算 */
     private Integer totalUnits;
 
     private String commissionCategory;                 // 用户手选，不自动带出

@@ -68,7 +68,7 @@ public class ProfitPlan extends BaseEntity {
     private BigDecimal firstLegPrice;
 
     /**
-     * 配送方式：AMAZON_SEND 亚马逊SEND（整票核算）/ SELF_CARRIER 自选承运人。
+     * 配送方式：AMAZON_SEND 亚马逊SEND（按当前产品核算配送费 $）/ SELF_CARRIER 自选承运人。
      * 决定头程运费算法；NULL 视为 SELF_CARRIER（历史方案兼容）
      */
     private String shippingMethod;
@@ -76,10 +76,10 @@ public class ProfitPlan extends BaseEntity {
     /** 头程方式 → dict_first_leg_method.method_code（记录用） */
     private String firstLegMethodCode;
 
-    /** 配送总费用 $（整票货件），仅 AMAZON_SEND 参与计算 */
+    /** 配送总费用 $（当前产品，非整票货件），仅 AMAZON_SEND 参与计算 */
     private BigDecimal shippingTotalFeeUsd;
 
-    /** 商品总数（件，本票货件），仅 AMAZON_SEND 参与计算 */
+    /** 当前产品的件数（不记单票货件总数），仅 AMAZON_SEND 参与计算 */
     private Integer totalUnits;
 
     /** 佣金类目，指向 dict_category_commission.category_code */

@@ -72,10 +72,15 @@ class ProductImportTest {
             assertTrue(wb.isSheetHidden(wb.getSheetIndex("_选项")), "选项表应隐藏");
 
             Row header = data.getRow(0);
-            assertEquals(30, header.getLastCellNum(), "共 30 列");
+            // 2026-11-10 起模板多了一列「配送总费用(￥)」，紧跟在「商品总数」后面：
+            // 这是自己选择承运人模式专用的人民币费用列，与美元那列按配送方式二选一。
+            // 列数从 30 变 31，最后一列「备注」的索引也跟着从 29 挪到 30。
+            assertEquals(31, header.getLastCellNum(), "共 31 列");
             assertEquals("*产品编号", header.getCell(0).getStringCellValue());
             assertEquals("*产品名称(中文)", header.getCell(1).getStringCellValue());
-            assertEquals("备注", header.getCell(29).getStringCellValue());
+            assertEquals("商品总数", header.getCell(23).getStringCellValue());
+            assertEquals("配送总费用(￥)", header.getCell(24).getStringCellValue(), "新增列紧跟商品总数");
+            assertEquals("备注", header.getCell(30).getStringCellValue());
 
             // 类目 / 状态 / 头程 / 配送 四个下拉
             assertEquals(4, data.getDataValidations().size());

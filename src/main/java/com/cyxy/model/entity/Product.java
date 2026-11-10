@@ -90,9 +90,12 @@ public class Product extends BaseEntity {
     private String firstLegMethodCode;
 
     /**
-     * 配送方式：AMAZON_SEND 亚马逊SEND（在亚马逊后台创建货件，配送费由亚马逊
-     * 整票核算，不产生运费单价）/ SELF_CARRIER 自己选择承运人（按单价 × 计费重）。
-     * NULL 视为 SELF_CARRIER（历史数据兼容）
+     * 配送方式：AMAZON_SEND 亚马逊SEND / SELF_CARRIER 自己选择承运人。
+     * 决定「哪一组费用字段生效」，NULL 视为 SELF_CARRIER（历史数据兼容）。
+     *
+     * 为什么要按配送方式分成两套费用字段：SEND 的费用由亚马逊后台核算、以美元结算；
+     * 自选承运人是自己找物流商结算、以人民币结算，币种和来源都不同。若合并成一个字段，
+     * 历史数据就无法判断当初填的是哪一种，所以各占一列、按配送方式二选一。
      */
     private String shippingMethod;
 
@@ -102,11 +105,31 @@ public class Product extends BaseEntity {
     /** 头程单价 ￥/kg。仅 SELF_CARRIER（自选承运人）模式使用 */
     private BigDecimal firstLegUnitPrice;
 
-    /** 配送总费用 $（整票货件）。仅 AMAZON_SEND 模式有值，由亚马逊后台自动核算 */
+    /**
+     * 配送总费用 $（当前产品）。仅 AMAZON_SEND 模式有值。
+     * 口径：一行 product 只记录一种产品，这里填的是「这个产品」的配送费，不再是整票货件费用；
+     * 与它相除的 totalUnits 也是这个产品的件数，分子分母同步从整票缩到单品，
+     * 所以「费用 × 汇率 ÷ 件数」的公式不用改，单件头程结果的口径仍然一致。
+     * ⚠️ 与 shippingTotalFeeCny 按配送方式二选一，不可混用、也不互相换算
+     */
     private BigDecimal shippingTotalFeeUsd;
 
-    /** 商品总数（件），本票货件总件数，两种配送方式都填 */
+    /** 商品总数量（件，当前产品）。每行记录单种产品，不记单票货件总数；两种配送方式都填 */
     private Integer totalUnits;
+
+    /**
+     * 配送总费用 ￥（当前产品）。仅 SELF_CARRIER（自己选择承运人）模式填写，
+     * 与 firstLegUnitPrice（头程单价）同组；AMAZON_SEND 模式应为 NULL。
+     *
+     * 为什么单独加这一列：自选承运人时既要按「单价 × 计费重」算单件头程，
+     * 又要留一份实际结算的总费用（人民币）备查，原来只有单价列，总额无处落库。
+     * 本期只做录入与留存，不参与利润计算 —— 计算公式本次不改。
+     *
+     * ⚠️ 系统里有两个「配送总费用」：本列（￥，自选承运人）与 shippingTotalFeeUsd
+     *    （$，亚马逊SEND）。靠列名后缀 cny / usd 区分，前端按配送方式条件显示，
+     *    同一时刻只会看到其中一个，填错模式等于把美元当人民币存进去。
+     */
+    private BigDecimal shippingTotalFeeCny;
 
     /**
      * 预计送达日期（自然日，精确到天）。

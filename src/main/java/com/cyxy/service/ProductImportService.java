@@ -119,11 +119,16 @@ public class ProductImportService {
             new ColDef("宽cm", "widthCm", true, BigDecimal.class, null, "包装外径，单位厘米"),
             new ColDef("高cm", "heightCm", true, BigDecimal.class, null, "包装外径，单位厘米；尺寸分段由后端按这三项自动算，不用填"),
             new ColDef("头程方式", "firstLegMethodCode", false, String.class, "firstLeg", "从下拉里选"),
-            new ColDef("配送方式", "shippingMethod", false, String.class, "shipping", "亚马逊SEND 填配送总费用；自选承运人填运费单价"),
+            /* ⚠️ 两个「配送总费用」按配送方式二选一，这里刻意不重命名已有的表头：
+               导入是按「表头名」定位列的（见 parseSheet），一旦改旧表头，业务同事手上
+               已经填好的老 Excel 里那一列就会被当成未知列跳过 —— 非必填列不报错、
+               数据却悄悄丢了。所以口径变化只写进填写说明（tip），不动表头名。 */
+            new ColDef("配送方式", "shippingMethod", false, String.class, "shipping", "亚马逊SEND 填「配送总费用$」；自己选择承运人填「头程运费单价￥/kg」+「配送总费用(￥)」"),
             new ColDef("物流商", "logisticsProvider", false, String.class, null, ""),
-            new ColDef("头程运费单价￥/kg", "firstLegUnitPrice", false, BigDecimal.class, null, "自选承运人时必填"),
-            new ColDef("配送总费用$", "shippingTotalFeeUsd", false, BigDecimal.class, null, "亚马逊SEND 的整票费用，单位美元"),
-            new ColDef("商品总数", "totalUnits", false, Integer.class, null, "本票货件总件数，整数"),
+            new ColDef("头程运费单价￥/kg", "firstLegUnitPrice", false, BigDecimal.class, null, "自己选择承运人时必填，与「配送总费用(￥)」同组填写"),
+            new ColDef("配送总费用$", "shippingTotalFeeUsd", false, BigDecimal.class, null, "仅亚马逊SEND 填写：当前产品的配送费（美元），不是整票货件费用；自选承运人请留空"),
+            new ColDef("商品总数", "totalUnits", false, Integer.class, null, "当前产品的总数量（件），整数；一行只记一种产品，不要填整票货件总件数"),
+            new ColDef("配送总费用(￥)", "shippingTotalFeeCny", false, BigDecimal.class, null, "仅自己选择承运人填写：当前产品的配送费（人民币），与头程运费单价同组；亚马逊SEND 请留空"),
             new ColDef("预计送达时间", "expectedDeliveryDate", false, LocalDate.class, null, "格式 2026-11-03；填了就是「配送中」，到货后可在系统里确认送达"),
             new ColDef("定价$", "listPriceUsd", false, BigDecimal.class, null, "售价，单位美元；不填按 0 处理"),
             new ColDef("竞品售价$", "competitorPriceUsd", false, BigDecimal.class, null, ""),
@@ -287,6 +292,23 @@ public class ProductImportService {
                 .map(DictOptionVO::name).filter(Objects::nonNull).toList();
         Row values = sheet.createRow(rowNum);
         values.createCell(0).setCellValue(String.join("、", categories));
+
+        // 两个「配送总费用」最容易填错：说明页上面是按列逐条写 tip，
+        // 但业务同事真正关心的是「我选了某个配送方式，到底该填哪几列」，
+        // 所以补一段按配送方式分组的对照，避免把美元填进人民币那一列。
+        rowNum += 2;
+        Row shipTitle = sheet.createRow(rowNum++);
+        shipTitle.createCell(0).setCellValue("配送方式与费用列对照");
+        shipTitle.getCell(0).setCellStyle(headStyle);
+        String[][] shipGuide = {
+                {"亚马逊SEND", "填「配送总费用$」+「商品总数」；不填头程运费单价、配送总费用(￥)"},
+                {"自己选择承运人", "填「头程运费单价￥/kg」+「配送总费用(￥)」+「商品总数」；不填配送总费用$"}
+        };
+        for (String[] line : shipGuide) {
+            Row r = sheet.createRow(rowNum++);
+            r.createCell(0).setCellValue(line[0]);
+            r.createCell(2).setCellValue(line[1]);
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -602,6 +624,8 @@ public class ProductImportService {
             case "firstLegUnitPrice" -> product.setFirstLegUnitPrice((BigDecimal) value);
             case "shippingTotalFeeUsd" -> product.setShippingTotalFeeUsd((BigDecimal) value);
             case "totalUnits" -> product.setTotalUnits((Integer) value);
+            // 自己选择承运人模式下的人民币配送总费用，与上面美元那列按配送方式二选一
+            case "shippingTotalFeeCny" -> product.setShippingTotalFeeCny((BigDecimal) value);
             case "expectedDeliveryDate" -> product.setExpectedDeliveryDate((LocalDate) value);
             case "listPriceUsd" -> product.setListPriceUsd((BigDecimal) value);
             case "competitorPriceUsd" -> product.setCompetitorPriceUsd((BigDecimal) value);

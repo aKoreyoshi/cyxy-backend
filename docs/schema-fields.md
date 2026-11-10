@@ -60,11 +60,22 @@
 | `height_cm` | decimal(10,2) | 包装高 cm（Q 列） |
 | `size_tier_code` | varchar(32) | **尺寸分段**：`small` / `large` / `oversize`，外键 → `dict_fba_size_tier`。由「包装长/宽/高 + 含包装实重」**自动匹配**得出，不需人工选择；后台保存时按字典规则兜底重算 |
 | `first_leg_method_code` | varchar(32) | 头程方式，外键 → `dict_first_leg_method` |
-| `shipping_method` | varchar(32) | **配送方式**：`AMAZON_SEND` 亚马逊SEND（配送费由亚马逊后台整票核算，不产生运费单价）/ `SELF_CARRIER` 自己选择承运人（按单价 × 计费重）。`NULL` 视为 `SELF_CARRIER`（历史数据兼容） |
+| `shipping_method` | varchar(32) | **配送方式**：`AMAZON_SEND` 亚马逊SEND（配送费按当前产品核算，填 `shipping_total_fee_usd`，不产生运费单价）/ `SELF_CARRIER` 自己选择承运人（填 `first_leg_unit_price` + `shipping_total_fee_cny`）。`NULL` 视为 `SELF_CARRIER`（历史数据兼容） |
 | `logistics_provider` | varchar(64) | 物流商名称（Y 列） |
 | `first_leg_unit_price` | decimal(10,2) | 头程单价 ￥/kg（Z 列）。**仅 SELF_CARRIER 模式使用** |
-| `shipping_total_fee_usd` | decimal(12,4) | **配送总费用 $**（整票货件）。**仅 AMAZON_SEND 模式有值**，由亚马逊后台自动核算 |
-| `total_units` | int unsigned | **商品总数（件）**，本票货件总件数，两种配送方式都填 |
+| `shipping_total_fee_usd` | decimal(12,4) | **配送总费用 $（当前产品）**。**仅 AMAZON_SEND 模式有值**，一行只记一种产品的费用，**不再代表整票货件** |
+| `total_units` | int unsigned | **商品总数量（件，当前产品）**。每行记录单种产品，不记单票货件总数；两种配送方式都填 |
+| `shipping_total_fee_cny` | decimal(12,4) | **配送总费用 ￥（当前产品）**。**仅 SELF_CARRIER 模式填写**，与「头程单价」同组；`AMAZON_SEND` 模式为 `NULL`。本期只做录入与留存，不参与利润计算 |
+
+> ⚠️ **两个「配送总费用」按配送方式严格二选一，绝不混用、也不互相换算**：
+>
+> | 配送方式 | 填哪个费用字段 | 同组字段 |
+> | --- | --- | --- |
+> | `AMAZON_SEND` 亚马逊SEND | `shipping_total_fee_usd`（$） | `total_units` |
+> | `SELF_CARRIER` 自己选择承运人 | `shipping_total_fee_cny`（￥） | `first_leg_unit_price`（头程单价）、`total_units` |
+>
+> 列名后缀 `usd` / `cny` 是第一层区分，币种不同、来源也不同（亚马逊后台核算 vs 自己找物流商结算），
+> 所以不合并成一个字段；表单按配送方式条件显示，同一时刻只会看到其中一个。
 | `expected_delivery_date` | date | **预计送达日期**（自然日，精确到天）。录入或编辑时填写；**确认送达后锁定**，需改先撤销确认 |
 | `actual_delivery_time` | datetime(3) | **实际送达时间**，点「确认送达」时由服务端按北京时间生成。**非空 = 已确认**，锁定配送相关字段；撤销确认时清空 |
 | `delivery_status` | varchar(16) | **配送状态**：`NOT_SET` 未填写 / `IN_TRANSIT` 配送中 / `EARLY` 提前送达 / `ON_TIME` 准时送达 / `LATE` 晚送达。冗余字段，便于列表筛选排序，判定真值仍看两个时间 |
@@ -361,6 +372,63 @@ WHERE tier_code = :tier AND price_band = :band
 
 ---
 
+## 9.1 `dict_return_processing_fee` 尾程退货处理费
+
+2026-11-10 新增。数据来源 `D:/Workbuddy/尾程退货费.xlsx`（原表 Sheet1 R4~R29 共 26 行）。
+利润计算器的「尾程退货费」由手填改为**只按实际计费重自动带出，输入框仍可手动更改**；
+带出结果只是填值，不锁定、不覆盖用户后续手改。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `tier_code` | varchar(32) | 大类 `small` / `large` / `oversize`，**只用于收窄范围**，不是必填条件；传空则全表按重量匹配 |
+| `group_code` | varchar(32) | 分组编码，7 个业务分组；参数列表展示页按它分节 |
+| `group_name` | varchar(64) | 分组名称（原表没有标题行，由业务口径给定） |
+| `sort_no` | int | 同大类内匹配顺序；区间重叠时取序号最小的一行 |
+| `weight_min_oz` | decimal(10,4) | 重量下界 oz（**左开**），匹配用 |
+| `weight_max_oz` | decimal(10,4) | 重量上界 oz（**右闭**），匹配用；`NULL` 表示不限 |
+| `weight_label` | varchar(64) | 原表 A 列区间文字，**仅展示、不参与判定** |
+| `fee_type` | varchar(16) | `FLAT` 固定值 / `FORMULA` 起步价+续重 |
+| `fee_usd` | decimal(10,2) | 固定费用 $/件（仅 FLAT） |
+| `base_fee_usd` | decimal(10,2) | 起步价 $（仅 FORMULA） |
+| `step_fee_usd` | decimal(10,4) | 每步进单位加价 $（仅 FORMULA） |
+| `step_unit` | varchar(16) | `OZ4` 每 4 盎司 / `LB` 每磅 |
+| `step_from_oz` | decimal(10,4) | 续重起算点 oz，只有超出这部分的重量才累加 |
+| `formula_text` | varchar(256) | 原表公式文字，展示用 |
+| `valid_from` / `valid_to` | date | 生效期；当前留空，见下方说明 |
+
+**7 个业务分组**（原表 R4~R29，行数即档位数）：
+
+| 分组 | 原表行 | 行数 | 说明 |
+|---|---|---|---|
+| `SMALL_STANDARD` 小号标准尺寸 | R4~R11 | 8 | 2 盎司一档，固定值 1.78~2.21 |
+| `LARGE_STANDARD` 大号标准尺寸 | R12~R24 | 13 | 12 档固定值 2.36~4.73 + 3~20lb 续重档 1 行 |
+| `LARGE_BULKY` 大号大件 | R25 | 1 | 0~50lb，$6.74 + 超出首磅每磅 $0.32 |
+| `OVERSIZE_0_50` 超大尺寸：0-50磅 | R26 | 1 | 0~50lb，$26.33 + 超出首磅每磅 $0.38 |
+| `OVERSIZE_50_70` 超大件：50-70磅(不含50磅) | R27 | 1 | $40.12 + 超出 51 磅每磅 $0.75 |
+| `OVERSIZE_70_150` 超大件：70-150磅(不含70磅) | R28 | 1 | $52.45 + 超出 71 磅每磅 $0.75 |
+| `OVERSIZE_150_PLUS` 超大件：150磅以上(不含150磅) | R29 | 1 | $157.35 + 超出 151 磅每磅 $0.19 |
+
+**为什么只按计费重取值**：计算器本来就算得出计费重和尺寸分段，用户不该为了带出一个
+费用再多填一项。原表重量区间互相重叠（小号/大号都有 ≤2oz、≤4oz 档，大件两行都写
+「0 至 50 磅」），所以后端按 `tierRank()`（原表大类顺序）+ `sort_no` 排序后取第一条命中，
+保证结果唯一；前端把已有 `sizeTierKey` 传进去只是为了收窄，不传也能查到值。
+
+**⚠️ 大件边界按分组名，不按 A 列原文**：R27/R28 的 A 列写「0 至 70 磅」「0 至 150 磅」，
+但实际匹配区间分别是 800~1120oz（50~70lb）、1120~2400oz（70~150lb），R29 是 >2400oz。
+所以展示页把「发货重量（原表）」和「匹配区间」拆成两列，避免看串。
+
+**为什么重量统一 oz**：计算器给出的计费重是 lb，查表时乘 16 即可；
+库里混用 lb / oz 会让区间边界判断出错。
+
+**FORMULA 档算法**：`起步价 + ceil(max(0, 计费重oz − step_from_oz) ÷ 步进oz) × step_fee_usd`。
+向上取整是按整个步进单位计费，不足一个单位也算一个单位。
+
+**当前数据**：FLAT 20 行 + FORMULA 6 行 = 26 行。
+⚠️ 原表标注「适用于自 2027-02-01 起发货的商品」，但 `valid_from` 特意留空：
+若现在按生效期过滤，自动带出会查不到任何数据。生效口径写在首行 `remark` 里留痕。
+
+---
+
 ## 10. `dict_first_leg_method` 头程方式与默认单价
 
 把「材积比」从手填参数变成由运输方式自动决定 —— 这是行业规则，不该让用户纠结。
@@ -397,9 +465,15 @@ WHERE tier_code = :tier AND price_band = :band
 
 **唯一索引**：`(currency_pair, rate_date)`
 
-**写入策略建议**：**一天一条**，同一天重复点"获取最新汇率"按钮则 UPDATE 覆盖 —— 这样趋势是一条干净的按日曲线。若想看日内波动，改成每次 append。
+**写入策略**：**一天一条**，同一天重复点「同步最新汇率」按钮则按唯一键 UPSERT 覆盖 —— 这样趋势是一条干净的按日曲线。若想看日内波动，改成每次 append。
+
+**⚠️ 本表只记录历史，不提供「当前汇率」**（2026-11-10 定案）：所有业务读取当前汇率的地方
+（利润测算、prefill、全局参数展示）一律走 `sys_config.DEFAULT_EXCHANGE_RATE`，不能自己
+`ORDER BY rate_date DESC LIMIT 1`，否则多处口径会打架。汇率同步任务在**同一个事务**里
+「按 rate_date upsert 本表」+「更新 sys_config 最新汇率」，成功后刷掉 `ProfitDictLoader` 缓存。
 
 > ⚠️ 链路必须是「前端 → 后端 → 第三方 API」，**绝不能让前端直连**：第三方有跨域限制、API Key 会泄露、前端写不进库、无法限流。建议在国内部署时备选国内数据源。
+> 数据源：主源 Frankfurter v2（`api.frankfurter.dev/v2/rate/usd/cny`，免密钥、官方参考价、返回业务日期），备源 open.er-api（`open.er-api.com/v6/latest/USD`）；两者都失败则保留上一次值，绝不让测算页报错。
 
 ---
 
@@ -429,7 +503,18 @@ WHERE tier_code = :tier AND price_band = :band
 | `DEFAULT_TARGET_MARGIN` | 20 | 默认目标利润率 % |
 | `DEFAULT_RETURN_RATE` | 4.13 | 默认退货率 % |
 | `DEFAULT_AD_RATE` | 15 | 默认广告占比 % |
-| `DEFAULT_EXCHANGE_RATE` | 6.68 | 无实时汇率时的兜底值 |
+| `DEFAULT_EXCHANGE_RATE` | 6.68 | **最新汇率**（中文名）：USD/CNY 当前生效值，业务读取的唯一入口；由汇率同步任务自动写入，不是人工常量。6.68 是初始基线 |
+
+**「最新汇率」行的修改时间**（2026-11-10）：`sys_config.updated_time` 就是这一行最后被改的时间，页面上的
+「修改时间 / 更新于」一律读它，不读历史表的 `fetched_at`（那是数据拉取时间）。三处入口 —— 全局参数页
+「获取最新汇率」、利润测算页「取最新」、汇率变化页「同步最新汇率」—— 共用
+`POST /api/exchange-rate/refresh`：后端调外部 API 拿真·最新值，一个事务里写历史表 + 更新本行，
+返回 `GET /api/exchange-rate/latest` 同结构的 `ExchangeRateVO`（含 `updated_time`）。
+定时任务仍按原时间自动执行，链路不变。
+
+> ⚠️ 同步时会**显式写入 `updated_time`**，不能只靠数据库 `ON UPDATE CURRENT_TIMESTAMP`：
+> 若这次拉到的汇率与上次相同，MySQL 认为行没有变化，自动时间戳不会更新，
+> 用户点「获取最新汇率」就看不到任何反馈，会以为按钮坏了。
 
 ---
 

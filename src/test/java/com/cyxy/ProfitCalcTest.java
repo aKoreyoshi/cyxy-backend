@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.cyxy.mapper.ProductFbaFeeMapper;
 import com.cyxy.mapper.ProductMapper;
 import com.cyxy.mapper.ProfitPlanMapper;
+import com.cyxy.mapper.SysConfigMapper;
 import com.cyxy.model.dto.ProfitCalcFormDTO;
+import com.cyxy.model.entity.SysConfig;
 import com.cyxy.model.entity.Product;
 import com.cyxy.model.entity.ProductFbaFee;
 import com.cyxy.model.entity.ProfitPlan;
@@ -47,6 +49,9 @@ class ProfitCalcTest {
 
     @Autowired
     private ProfitPlanMapper planMapper;
+
+    @Autowired
+    private SysConfigMapper sysConfigMapper;
 
     /* ------------------------------------------------------------------ */
     /* 计算                                                                */
@@ -93,7 +98,7 @@ class ProfitCalcTest {
     }
 
     @Test
-    @DisplayName("亚马逊SEND：单件头程 = 配送总费用 × 汇率 ÷ 商品总数")
+    @DisplayName("亚马逊SEND：单件头程 = 当前产品配送总费用 × 汇率 ÷ 当前产品件数")
     void firstLegAmazonSend() {
         ProfitCalcResultHolder base = calc(baseForm());
 
@@ -112,7 +117,7 @@ class ProfitCalcTest {
     }
 
     @Test
-    @DisplayName("亚马逊SEND：商品总数为空/0 时头程按 0 算，不抛除零")
+    @DisplayName("亚马逊SEND：当前产品件数为空/0 时头程按 0 算，不抛除零")
     void firstLegAmazonSendNoUnits() {
         ProfitCalcFormDTO f = baseForm();
         f.setShippingMethod("AMAZON_SEND");
@@ -314,7 +319,12 @@ class ProfitCalcTest {
         // 头程走 SEA：默认单价 8.00，材积比 5000
         assertTrue(f.getFirstLegPrice().compareTo(new BigDecimal("8.00")) == 0);
         assertEquals(5000, f.getVolumeDivisor());
-        assertEquals(0, f.getExchangeRate().compareTo(new BigDecimal("6.68")), "最新汇率 6.68");
+        // prefill 的汇率来自全局参数「最新汇率」，不能写死 6.68：
+        // 一旦汇率同步过，这里就该返回同步后的当前值。回归基准另在 baseForm() 里固定 6.68，
+        // 所以实时汇率怎么变都不会把 ￥95.13 / ￥31.72 的基准算崩。
+        SysConfig cfg = sysConfigMapper.selectById("DEFAULT_EXCHANGE_RATE");
+        assertEquals(0, new BigDecimal(cfg.getConfigValue()).compareTo(f.getExchangeRate()),
+                "prefill 汇率应等于全局参数「最新汇率」");
         assertNull(f.getInboundConfigFeeUsd(), "没测算过，手填费用留空");
     }
 
@@ -333,7 +343,7 @@ class ProfitCalcTest {
     }
 
     @Test
-    @DisplayName("prefill：配送方式/整票费用/件数带出，产品自带单价优先于头程方式默认价")
+    @DisplayName("prefill：配送方式/当前产品费用/件数带出，产品自带单价优先于头程方式默认价")
     void prefillShippingMethod() {
         Product p = insertProduct();
         p.setShippingMethod("AMAZON_SEND");
@@ -344,7 +354,7 @@ class ProfitCalcTest {
 
         ProfitCalcFormDTO f = profitCalcService.prefill(p.getId());
         assertEquals("AMAZON_SEND", f.getShippingMethod());
-        assertTrue(f.getShippingTotalFeeUsd().compareTo(new BigDecimal("133.60")) == 0, "整票费用带出");
+        assertTrue(f.getShippingTotalFeeUsd().compareTo(new BigDecimal("133.60")) == 0, "当前产品费用带出");
         assertEquals(20, f.getTotalUnits());
         assertEquals("SEA", f.getFirstLegMethodCode(), "头程方式带出");
         assertTrue(f.getFirstLegPrice().compareTo(new BigDecimal("9.9")) == 0, "产品自带单价优先");

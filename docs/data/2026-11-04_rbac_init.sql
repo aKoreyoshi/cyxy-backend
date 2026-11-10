@@ -9,8 +9,10 @@
 --      自己分角色，正好把新功能从头到尾自测一遍。
 --   2) 超管角色【不写】 sys_role_menu —— 拦截器对 is_builtin=1 直接全放行，
 --      菜单树也走「全量」分支。这样权限表被清空也不会把管理员锁在外面。
---   3) 菜单 id 从 1 连续编到 20：一级菜单 1~5（首页 / 系统管理 / 产品管理 /
---      运营工具 / 参数列表），子页 6~20，与 router/menu.json 的清单逐条对应。
+--   3) 菜单 id 从 1 连续编到 21：一级菜单 1~5（首页 / 系统管理 / 产品管理 /
+--      运营工具 / 参数列表），子页 6~21，与 router/menu.json 的清单逐条对应。
+--      id=21「尾程退货费」于 2026-11-10 追加（历史库请改跑
+--      docs/data/2026-11-10_menu_add_return_fee.sql，它还负责给普通角色补授权）。
 --      ⚠️ 本脚本只适用于【全新空库】。sys_menu 只有主键 id、route_name 没有
 --         唯一索引，历史库直接重跑会按新 id 再插一份重复菜单。已有菜单数据的
 --         库请改跑 docs/data/2026-11-05_menu_reorder.sql（按 route_name 幂等重排）。
@@ -98,10 +100,10 @@ VALUES
         '/api/product/create,/api/product/import'),
 
   -- 运营工具：只拦 save；calc 是 POST 但只试算不落库，只读角色应该照样能算
-  (12, 4, '利润计算器', 'TOOLS_PROFIT',  '/tools/profit-calculator', NULL,    0, 10, 1, 1,
+  (12, 4, '利润测算',   'TOOLS_PROFIT',  '/tools/profit-calculator', NULL,    0, 10, 1, 1,
         '/api/profit/save'),
 
-  -- 参数列表（8 个页全是只读展示，无写接口，角色页只读开关会置灰）
+  -- 参数列表（9 个页全是只读展示，无写接口，角色页只读开关会置灰）
   (13, 5, '佣金费率',       'PARAMS_COMMISSION', '/params/commission',       'icon-commission', 0, 10, 1, 1, NULL),
   (14, 5, '退货阈值',       'PARAMS_RETURN',     '/params/return-threshold', 'icon-return',     0, 20, 1, 1, NULL),
   (15, 5, '汇率变化',       'PARAMS_EXCHANGE',   '/params/exchange-rate',    'icon-exchange',   0, 30, 1, 1, NULL),
@@ -109,7 +111,9 @@ VALUES
   (17, 5, '尺寸收费标准',   'PARAMS_RATE',       '/params/fba-rate',         'icon-rate',       0, 50, 1, 1, NULL),
   (18, 5, '头程方式',       'PARAMS_FIRST_LEG',  '/params/first-leg',        'icon-truck',      0, 60, 1, 1, NULL),
   (19, 5, '超大件费率',     'PARAMS_STEP_RATE',  '/params/step-rate',        'icon-oversize',   0, 70, 1, 1, NULL),
-  (20, 5, '全局参数',       'PARAMS_SYS_CONFIG', '/params/sys-config',       'icon-settings',   0, 80, 1, 1, NULL)
+  (20, 5, '全局参数',       'PARAMS_SYS_CONFIG', '/params/sys-config',       'icon-settings',   0, 80, 1, 1, NULL),
+  -- 2026-11-10 新增：尾程退货费展示页（7 分组），纯只读
+  (21, 5, '尾程退货费',     'PARAMS_RETURN_FEE', '/params/return-fee',       'icon-return-fee', 0, 90, 1, 1, NULL)
 ON DUPLICATE KEY UPDATE
   -- 只修正技术字段；title / icon / sort_no / visible 允许管理员在页面上改，重跑不覆盖
   `parent_id`          = VALUES(`parent_id`),
@@ -120,7 +124,7 @@ ON DUPLICATE KEY UPDATE
   `write_api_patterns` = VALUES(`write_api_patterns`);
 
 -- ---------------------------------------------------------------------
--- 5. 自检：正常应看到 1 个超管角色、1 个账号、20 条菜单（全新环境全部启用）、
+-- 5. 自检：正常应看到 1 个超管角色、1 个账号、21 条菜单（全新环境全部启用）、
 --          3 个菜单带写接口清单。
 -- ---------------------------------------------------------------------
 SELECT 'sys_role' AS tbl, COUNT(*) AS cnt FROM `sys_role`

@@ -66,6 +66,18 @@ cyxy:
   auth:
     token-hours: 8
 
+  # 汇率同步（2026-11-10）：两家都免密钥，主源 Frankfurter v2、备源 open.er-api。
+  # ⚠️ 键必须 kebab-case：@Value 是精确匹配、不做松散绑定（项目踩过 token_hours 的坑）。
+  # enabled 是给线上留的开关：国内服务器若完全访问不了境外接口，关掉自动同步即可，
+  # 页面照常读 sys_config 里的人工值、也能手动点同步，测算页不受任何影响。
+  exchange-rate:
+    enabled: true
+    primary-url: "https://api.frankfurter.dev/v2/rate/usd/cny"
+    backup-url: "https://open.er-api.com/v6/latest/USD"
+    connect-timeout-ms: 3000
+    read-timeout-ms: 3000
+    sync-cron: "0 30 9,23 * * *"
+
   # COS 非机密项给默认值：服务器上若忘了放 application-local.yml 也能正常启动。
   # 两个密钥只在 application-local.yml（已 gitignore），profile 专属配置优先级更高，
   # 同名键会覆盖这里、不同名键会合并 —— 所以用户已填好的那份不用动。

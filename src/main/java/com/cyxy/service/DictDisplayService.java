@@ -36,6 +36,7 @@ public class DictDisplayService {
     private final DictFbaRateMapper fbaRateMapper;
     private final DictFirstLegMethodMapper firstLegMethodMapper;
     private final DictFbaStepRateMapper stepRateMapper;
+    private final DictReturnProcessingFeeMapper returnFeeMapper;
     private final SysConfigMapper sysConfigMapper;
     private final DictCategoryCommissionMapper commissionMapper;
     private final DictCategoryCommissionTierMapper commissionTierMapper;
@@ -56,6 +57,7 @@ public class DictDisplayService {
             case "fba-rate" -> (List<?>) fbaRateMapper.selectList(null);
             case "first-leg" -> (List<?>) firstLegMethodMapper.selectList(null);
             case "step-rate" -> (List<?>) stepRateMapper.selectList(null);
+            case "return-fee" -> (List<?>) returnFeeMapper.selectList(null);
             case "sys-config" -> (List<?>) sysConfigMapper.selectList(null);
             default -> throw new CYXYException("不支持的字典类型：" + type);
         };

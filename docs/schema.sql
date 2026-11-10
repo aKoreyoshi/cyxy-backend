@@ -164,6 +164,51 @@ CREATE TABLE IF NOT EXISTS `dict_fba_step_rate` (
 
 
 -- ---------------------------------------------------------------------
+-- 6.1 尾程退货处理费（2026-11-10 新增）
+--     利润计算器的「尾程退货费」由手填改为按计费重自动带出，输入框仍可手改。
+--     ⚠️ 取值只依据「实际计费重」：tier_code 仅是收窄用的大类
+--        （small / large / oversize），不要求用户额外选尺寸档；传空时后端
+--        按原表顺序全表匹配。原表重量区间本身重叠（小号/大号都有 ≤2oz、
+--        ≤4oz 档，大件两行都写「0 至 50 磅」），靠 sort_no 定优先级。
+--     ⚠️ 7 个业务分组由业务口径给定（原表没有分组标题行），见 group_code：
+--        SMALL_STANDARD / LARGE_STANDARD / LARGE_BULKY / OVERSIZE_0_50 /
+--        OVERSIZE_50_70 / OVERSIZE_70_150 / OVERSIZE_150_PLUS。
+--     ⚠️ 大件后 3 组 A 列原文写「0 至 70 磅」「0 至 150 磅」，但匹配边界
+--        按分组名取 50~70lb / 70~150lb / >150lb；weight_label 只作展示。
+--     ⚠️ 重量统一 oz（1 lb = 16 oz），weight_min_oz 左开、weight_max_oz 右闭。
+--        FLAT = 固定值 20 行；FORMULA = 起步价+续重 6 行，共 26 行。
+--     ⚠️ 原表标注 2027-02-01 生效，valid_from 特意留空：现在若按日期过滤，
+--        自动带出会查不到任何数据。生效口径写进 remark 留痕。
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `dict_return_processing_fee` (
+  `id`                  BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT COMMENT '物理主键',
+  `tier_code`           VARCHAR(32)      NOT NULL                COMMENT '大类 small / large / oversize，仅用于收窄；空则全表按重量匹配',
+  `group_code`          VARCHAR(32)      NULL     DEFAULT NULL   COMMENT '分组编码：7 个业务分组，展示页按它分节',
+  `group_name`          VARCHAR(64)      NULL     DEFAULT NULL   COMMENT '分组名称（原表无标题行，由业务口径给定）',
+  `sort_no`             INT              NOT NULL DEFAULT 0      COMMENT '同大类内匹配顺序；重叠档取序号最小的一行',
+  `weight_min_oz`       DECIMAL(10,4)    NOT NULL DEFAULT 0.0000 COMMENT '重量下界 oz（左开）',
+  `weight_max_oz`       DECIMAL(10,4)    NULL     DEFAULT NULL   COMMENT '重量上界 oz（右闭），NULL 表示不限',
+  `weight_label`        VARCHAR(64)      NOT NULL                COMMENT '原表区间文字，展示用',
+  `fee_type`            VARCHAR(16)      NOT NULL DEFAULT 'FLAT' COMMENT 'FLAT 固定值 / FORMULA 起步价+续重',
+  `fee_usd`             DECIMAL(10,2)    NULL     DEFAULT NULL   COMMENT '固定尾程退货费 $/件（FLAT）',
+  `base_fee_usd`        DECIMAL(10,2)    NULL     DEFAULT NULL   COMMENT '起步价 $（FORMULA）',
+  `step_fee_usd`        DECIMAL(10,4)    NULL     DEFAULT NULL   COMMENT '每步进单位加价 $（FORMULA）',
+  `step_unit`           VARCHAR(16)      NULL     DEFAULT NULL   COMMENT '步进单位：OZ4 每 4 盎司 / LB 每磅',
+  `step_from_oz`        DECIMAL(10,4)    NULL     DEFAULT NULL   COMMENT '续重起算点 oz',
+  `formula_text`        VARCHAR(256)     NULL     DEFAULT NULL   COMMENT '原表公式文字，展示用',
+  `remark`              VARCHAR(512)     NULL     DEFAULT NULL   COMMENT '备注',
+  `valid_from`          DATE             NULL     DEFAULT NULL   COMMENT '生效起始日（当前留空，见迁移脚本说明）',
+  `valid_to`            DATE             NULL     DEFAULT NULL   COMMENT '生效截止日',
+  `created_time`        DATETIME(3)      NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  `updated_time`        DATETIME(3)      NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+  `is_deleted`          INT              NOT NULL DEFAULT 0      COMMENT '软删：0 未删 / 1 已删',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_tier_sort` (`tier_code`, `sort_no`),
+  KEY `idx_lookup` (`tier_code`, `weight_min_oz`, `weight_max_oz`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='尾程退货处理费字典';
+
+
+-- ---------------------------------------------------------------------
 -- 7. 头程方式与默认单价
 --    材积比挂在运输方式上：海运泡货 5000、空运 6000，不该让用户手填
 -- ---------------------------------------------------------------------
@@ -185,7 +230,8 @@ CREATE TABLE IF NOT EXISTS `dict_first_leg_method` (
 -- ---------------------------------------------------------------------
 -- 8. 汇率（时序表）
 --    单独建表而非放 sys_config：需要保留历史画趋势曲线
---    写入策略建议：一天一条，同一天重复获取则 UPDATE 覆盖
+--    写入策略：一天一条，同一天重复获取按唯一键 UPSERT 覆盖
+--    （已由 ExchangeRateSyncService 实现；本表只记历史，当前值读 sys_config「最新汇率」）
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `dict_exchange_rate` (
   `id`                  BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT COMMENT '物理主键',
@@ -207,7 +253,10 @@ CREATE TABLE IF NOT EXISTS `dict_exchange_rate` (
 
 -- ---------------------------------------------------------------------
 -- 9. 全局计算参数
---    兜底存放原 Excel 里散落的硬编码常量
+--    兜底存放原 Excel 里散落的硬编码常量。
+--    ⚠️ 例外：DEFAULT_EXCHANGE_RATE（中文名「最新汇率」）是系统自动写入的派生值，
+--       由汇率同步任务与 dict_exchange_rate 最新一天记录同事务更新，是所有业务
+--       读取「当前汇率」的唯一入口；其余 17 项才是人工配置的常量。
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `sys_config` (
   `config_key`          VARCHAR(64)      NOT NULL                COMMENT '主键，如 FUEL_SURCHARGE_RATE',
@@ -254,8 +303,13 @@ CREATE TABLE IF NOT EXISTS `product` (
   `shipping_method`       VARCHAR(32)      NULL     DEFAULT NULL   COMMENT '配送方式：AMAZON_SEND=亚马逊SEND / SELF_CARRIER=自选承运人；NULL 视为 SELF_CARRIER（历史数据）',
   `logistics_provider`    VARCHAR(64)      NULL     DEFAULT NULL   COMMENT '物流商名称 Excel Y',
   `first_leg_unit_price`  DECIMAL(10,2)    NULL     DEFAULT NULL   COMMENT '头程单价 ￥/kg Excel Z',
-  `shipping_total_fee_usd` DECIMAL(12,4)   NULL     DEFAULT NULL   COMMENT '配送总费用 $（整票货件，亚马逊 SEND 模式由亚马逊后台核算；自选承运人模式为 NULL）',
-  `total_units`           INT UNSIGNED     NULL     DEFAULT NULL   COMMENT '商品总数（件），本票货件总件数',
+  -- ⚠️ 两个「配送总费用」按配送方式二选一，不可混用：
+  --    AMAZON_SEND  → shipping_total_fee_usd（$，当前产品的费用，非整票）
+  --    SELF_CARRIER → shipping_total_fee_cny（￥，与头程单价同组填写）
+  --    列名后缀 usd / cny 是第一层区分；币种不同、来源不同，故不合并成一个字段。
+  `shipping_total_fee_usd` DECIMAL(12,4)   NULL     DEFAULT NULL   COMMENT '配送总费用 $（当前产品，仅 AMAZON_SEND 亚马逊SEND 模式填写；每行记录单种产品，不再代表整票货件。与 shipping_total_fee_cny 按配送方式二选一）',
+  `total_units`           INT UNSIGNED     NULL     DEFAULT NULL   COMMENT '商品总数量（件，当前产品；每行记录单种产品，不记单票货件总数；两种配送方式都填）',
+  `shipping_total_fee_cny` DECIMAL(12,4)   NULL     DEFAULT NULL   COMMENT '配送总费用 ￥（当前产品，仅 SELF_CARRIER 自己选择承运人模式填写，与头程单价同组；AMAZON_SEND 模式为 NULL。与 shipping_total_fee_usd 是两种配送方式各自专用的字段，不可混用）',
 
   /* --- 配送状态：预计送达 → 确认送达（按整票，一期不拆多票货件） ---
      判定口径：实际送达日期 − 预计送达日期，按自然日比较（同一天算准时）；
